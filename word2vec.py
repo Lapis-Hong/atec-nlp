@@ -32,7 +32,7 @@ def sentences_iterator(input_file, char_level=True):
             yield jieba.cut(s2)
 
 
-def word2vec(sentences, output_model_file, output_vector_file, size=128, window=5, min_count=1):
+def word2vec(sentences, output_model_file, output_vector_file, size=32, window=5, min_count=1):
     s_time = time.time()
     # trim unneeded model memory = use(much) less RAM
     # model.init_sims(replace=True)
