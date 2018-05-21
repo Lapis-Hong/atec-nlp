@@ -3,26 +3,29 @@
 # @Author: lapis-hong
 # @Date  : 2018/5/6
 from __future__ import unicode_literals
+
 import os
 import re
 import sys
+import time
+import logging
+import multiprocessing
 from collections import Counter
 
 import numpy as np
 import tensorflow as tf
 import jieba
 import jieba.analyse
+from gensim.models import Word2Vec
 
+sys.path.insert(0, '../')
 from langconv import Converter
 reload(sys)
 sys.setdefaultencoding('utf-8')
 
-jieba.enable_parallel(4)
-jieba.add_word(u'花呗', 57419)
-jieba.add_word(u'借呗', 23730)
-jieba.add_word(u'支付宝', 3275)
-jieba.add_word(u'淘宝网', 13)
-jieba.add_word(u'淘宝', 1467)
+# jieba.enable_parallel(4)  # This is a bug, make add_word no use
+jieba.load_userdict('../data/UserDict.txt')
+stopwords = ['的', '了']
 
 
 class Dataset():
@@ -33,8 +36,10 @@ class Dataset():
                  npy_word_data_file='../data/train_word.npy',
                  char_vocab_file='../data/vocab.char',
                  word_vocab_file='../data/vocab.word',
-                 word2vec_file='../data/w2v.txt',
+                 char2vec_file='../data/char_vec',
+                 word2vec_file='../data/word_vec',
                  char_level=True,
+                 embedding_dim=128,
                  is_training=True,
                  ):
         self.data_file = data_file
@@ -43,12 +48,17 @@ class Dataset():
         self.char_vocab_file = char_vocab_file
         self.word_vocab_file = word_vocab_file
         self.word2vec_file = word2vec_file
+        self.char2vec_file = char2vec_file
         self.char_level = char_level
+        self.embedding_dim = embedding_dim
+        self.is_training = is_training
         if self.char_level:
             print('Using character level model.')
         else:
             print('Using word level model.')
-        self.is_training = is_training
+        self.w2v_file = self.char2vec_file if self.char_level else self.word2vec_file
+        self.vocab_file = self.char_vocab_file if self.char_level else self.word_vocab_file
+        self.npy_file = self.npy_char_data_file if self.char_level else self.npy_word_data_file
 
     @staticmethod
     def _clean_text(text):
@@ -86,7 +96,13 @@ class Dataset():
             else:
                 yield s1, s2, None  # for consistent
 
-    def _build_vocab(self, max_vocab_size=100000, min_count=1):
+    def _save_token_data(self):
+        data_iter = self._load_data(self.data_file)
+        with open('../data/atec_token.csv', 'w') as f:
+            for s1, s2, _ in data_iter:
+                f.write(' '.join(s1) + '|' + ' '.join(s2) + '\n')
+
+    def _build_vocab(self, max_vocab_size=100000, min_count=2):
         """Build vocabulary list."""
         data_iter = self._load_data(self.data_file)
         token = []
@@ -104,8 +120,7 @@ class Dataset():
         vocab += [w[0] for w in word_count if w[1] >= min_count]
         vocab.append('<PAD>')  # add word '<PAD>' for padding
         print("Vocabulary size: {}".format(len(vocab)))
-        vocab_file = self.char_vocab_file if self.char_level else self.word_vocab_file
-        with open(vocab_file, 'w') as fo:
+        with open(self.vocab_file, 'w') as fo:
             fo.write('\n'.join(vocab))
 
     def read_vocab(self):
@@ -113,15 +128,57 @@ class Dataset():
         Returns:
              tuple (id2word, word2id).
         """
-        vocab_file = self.char_vocab_file if self.char_level else self.word_vocab_file
-        if not os.path.exists(vocab_file):
+        if not os.path.exists(self.vocab_file):
             print('Vocabulary file not found. Building vocabulary...')
             self._build_vocab()
         else:
-            print("Reading vocabulary file from {}".format(vocab_file))
-        id2word = open(vocab_file).read().split('\n')  # list
+            print("Reading vocabulary file from {}".format(self.vocab_file))
+        id2word = open(self.vocab_file).read().split('\n')  # list
         word2id = dict(zip(id2word, range(len(id2word))))  # dict
         return id2word, word2id
+
+    def _word2vec(self, window=5, min_count=2):
+        """Train and save word vectors"""
+        logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+        s_time = time.time()
+        s1, s2, _ = zip(*list(self._load_data(self.data_file)))
+        sentences = s1 + s2
+        size = self.embedding_dim
+        # trim unneeded model memory = use(much) less RAM
+        # model.init_sims(replace=True)
+        model = Word2Vec(sentences, sg=1, size=size, window=window, min_count=min_count,
+                         negative=3, sample=0.001, hs=1, workers=multiprocessing.cpu_count(), iter=20)
+        # model.save(output_model_file)
+        model.wv.save_word2vec_format(self.w2v_file, binary=False)
+        print("Word2vec training time: %d s" % (time.time() - s_time))
+
+    def load_word2vec(self):
+        """mapping the words to word vectors.
+        Returns:
+            tuple (words, vectors)
+        """
+        if not os.path.exists(self.w2v_file):
+            print('Word vectors file not found. Training word vectors...')
+            self._word2vec()
+        words, vecs = [], []
+        fr = open(self.w2v_file)
+        word_dim = int(fr.readline().strip().split(' ')[1])  # first line
+        print("Pre-trained word vectors dim: {}".format(word_dim))
+        if word_dim != self.embedding_dim:
+            print("Inconsistent word embedding dim, retrain word vectors...")
+            self._word2vec()
+            return self.load_word2vec()
+        else:
+            words.append("UNK")
+            vecs.append([0] * word_dim)
+            words.append("<PAD>")
+            vecs.append([0] * word_dim)
+            for line in fr:
+                line = line.decode('utf-8').strip().split(' ')
+                words.append(line[0])
+                vecs.append(line[1:])
+            print "Loaded pre-trained word vectors."
+        return words, vecs
 
     def process_data(self, data_file, sequence_length=20):
         """Process text data file to word-id matrix representation.
@@ -135,9 +192,8 @@ class Dataset():
             else:
                 each element of list is [s1_pad, s2_pad, len(s1), len(s2)]
         """
-        if (self.char_level and os.path.exists(self.npy_char_data_file)) or \
-                (not self.char_level and os.path.exists(self.npy_word_data_file)):
-            dataset = np.load(self.npy_char_data_file)
+        if data_file == self.data_file and os.path.exists(self.npy_file):  # only for all train data
+            dataset = np.load(self.npy_file)
             # check sequence length same or not
             if len(dataset[0][0]) == sequence_length:
                 print("Loaded saved npy word-id matrix train file.")
@@ -167,8 +223,7 @@ class Dataset():
                 dataset.append([s1_pad[0], s2_pad[0], s1_len, s2_len])
         print("Saving npy...")
         dataset = np.asarray(dataset)
-        save_file = self.npy_char_data_file if self.char_level else self.npy_word_data_file
-        np.save(save_file, dataset)
+        np.save(self.npy_file, dataset)
         # np.savez(save_file, x1=x1, x2=x2, y=y)  # save multiple arrays as zip file.
         # np.savetxt(save_file, np.concatenate([x1, x2, y], axis=1), fmt="%d")  # or use np.hstack()
         return dataset
@@ -224,32 +279,20 @@ class Dataset():
                 end_index = min((batch_num + 1) * batch_size, data_size)
                 yield shuffled_data[start_index:end_index]
 
-    def load_word2vec(self):
-        """mapping the words to word vectors, return tuple(words, vectors)"""
-        words, vecs = [], []
-        fr = open(self.word2vec_file, "r")
-        word_dim = int(fr.readline().strip().split(' ')[1])  # first line
-        words.append("UNK")
-        vecs.append([0] * word_dim)
-        words.append("<PAD>")
-        vecs.append([0] * word_dim)
-        for line in fr:
-            line = line.decode('utf-8').strip().split(' ')
-            words.append(line[0])
-            vecs.append(line[1:])
-        print "Loaded word2vec."
-        return words, vecs
 
 if __name__ == '__main__':
     d_char = Dataset(char_level=True)
-    d_word = Dataset(char_level=False)
-    # print(d_word._load_data('../data/train.csv').next())
+    d_word = Dataset(char_level=False, embedding_dim=128)
+    # s1, s2, y = d_word._load_data('../data/train.csv').next()
+
     # d_word._build_vocab()
+    d_word._save_token_data()
     # id2w, w2id = d_word.read_vocab()
-    # dataset = Dataset().process_data('../data/train.csv')
+    # dataset = Dataset().process_data('../data/atec_nlp_sim_train.csv')
     # data = Dataset().batch_iter(dataset, 5, 1, shuffle=False).next()
     # print(data)
-    d_word.load_word2vec()
+    # d_word.load_word2vec()
+
 
 
 
