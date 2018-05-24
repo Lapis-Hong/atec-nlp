@@ -15,40 +15,40 @@ from text_rcnn import TextRCNN
 tf.flags.DEFINE_string("data_file", "../data/atec_nlp_sim_train.csv", "Training data file path.")
 tf.flags.DEFINE_float("val_percentage", .2, "Percentage of the training data to use for validation. (default: 0.2)")
 tf.flags.DEFINE_integer("random_seed", 123, "Random seed to split train and test. (default: None)")
-tf.flags.DEFINE_integer("max_document_length", 20, "Max document length of each train pair. (default: 15)")
+tf.flags.DEFINE_integer("max_document_length", 50, "Max document length of each train pair. (default: 15)")
 
 # Model Hyperparameters
 tf.flags.DEFINE_string("model_class", "siamese", "Model class, one of {`siamese`, `textrcnn`}")
 tf.flags.DEFINE_string("model_type", "cnn", "Model type, one of {`cnn`, `rnn`, `rcnn`} (default: rnn)")
-tf.flags.DEFINE_boolean("char_model", False, "Character based syntactic model. if false, word based semantic model. (default: True)")
+tf.flags.DEFINE_boolean("char_model", True, "Character based syntactic model. if false, word based semantic model. (default: True)")
 tf.flags.DEFINE_integer("embedding_dim", 128, "Dimensionality of character/word embedding (default: 300)")
 tf.flags.DEFINE_string("word_embedding_type", "static", "One of `rand`, `static`, `non-static`, random init(rand) vs pretrained word2vec(static) vs pretrained word2vec + training(non-static)")
 # If include CNN
 tf.flags.DEFINE_string("filter_sizes", "2,3,4,5", "Comma-separated filter sizes (default: '3,4,5')")
-tf.flags.DEFINE_integer("num_filters", 50, "Number of filters per filter size (default: 128)")
+tf.flags.DEFINE_integer("num_filters", 100, "Number of filters per filter size (default: 128)")
 # If include RNN
 tf.flags.DEFINE_string("rnn_cell", "lstm", "Rnn cell type, lstm or gru (default: lstm)")
 tf.flags.DEFINE_integer("hidden_units", 100, "Number of hidden units (default: 50)")
 tf.flags.DEFINE_integer("num_layers", 2, "Number of rnn layers (default: 3)")
 tf.flags.DEFINE_float("clip_norm", None, "Gradient clipping norm value set None to not use (default: 5)")
-tf.flags.DEFINE_boolean("use_attention", True, "Whether use self attention or not (default: False)")
+tf.flags.DEFINE_boolean("use_attention", False, "Whether use self attention or not (default: False)")
 # Common
 tf.flags.DEFINE_boolean("weight_sharing", True, "Sharing CNN or LSTM weights. (default: True")
 tf.flags.DEFINE_string("energy_function", "cosine", "Similarity energy function, one of {`euclidean`, `cosine`, `exp_manhattan`, `combine`} (default: euclidean)")
 tf.flags.DEFINE_string("loss_function", "contrasive", "Loss function one of `cross_entrophy`, `contrasive`, (default: contrasive loss)")
 # only for contrasive loss
-tf.flags.DEFINE_float("scale_pos_weight", 1, "Scale loss function for imbalance data, set it around neg_samples / pos_samples ")
+tf.flags.DEFINE_float("scale_pos_weight", 2, "Scale loss function for imbalance data, set it around neg_samples / pos_samples ")
 tf.flags.DEFINE_float("margin", 0.0, "Margin for contrasive loss (default: 0.0)")
 tf.flags.DEFINE_float("pred_threshold", 0.50, "Threshold for classify.(default: 0.5)")
 tf.flags.DEFINE_boolean("dense_layer", False, "Whether to add a fully connected layer before calculate energy function. (default: False)")
-tf.flags.DEFINE_float("dropout_keep_prob", 0.7, "Dropout keep probability (default: 1.0)")
+tf.flags.DEFINE_float("dropout_keep_prob", 1.0, "Dropout keep probability (default: 1.0)")
 tf.flags.DEFINE_float("l2_reg_lambda", 0, "L2 regularizaion lambda (default: 0.0)")
 
 # Training parameters
-tf.flags.DEFINE_string("model_dir", "../model/tf", "Model directory (default: ./model)")
+tf.flags.DEFINE_string("model_dir", "../model/cnn2", "Model directory (default: ./model)")
 tf.flags.DEFINE_integer("batch_size", 128, "Batch Size (default: 64)")
-tf.flags.DEFINE_float("lr", 1e-4, "Initial learning rate (default: 1e-3)")
-tf.flags.DEFINE_float("weight_decay_rate", 0.9, "Exponential weight decay rate (default: 0.9) ")
+tf.flags.DEFINE_float("lr", 1e-3, "Initial learning rate (default: 1e-3)")
+tf.flags.DEFINE_float("weight_decay_rate", 0.8, "Exponential weight decay rate (default: 0.9) ")
 tf.flags.DEFINE_integer("num_epochs", 100, "Number of training epochs (default: 200)")
 tf.flags.DEFINE_integer("log_every_steps", 100, "Print log info after this many steps (default: 100)")
 tf.flags.DEFINE_integer("evaluate_every_steps", 100, "Evaluate model on dev set after this many steps (default: 100)")
@@ -81,6 +81,7 @@ print("Vocabulary Size: {:d}".format(len(vocab)))
 
 def train():
     with tf.Graph().as_default():
+        tf.set_random_seed(FLAGS.random_seed)
         session_conf = tf.ConfigProto(
           allow_soft_placement=FLAGS.allow_soft_placement,
           log_device_placement=FLAGS.log_device_placement)
@@ -124,14 +125,14 @@ def train():
                     pos_weight=FLAGS.scale_pos_weight,
                     l2_reg_lambda=FLAGS.l2_reg_lambda,
                     weight_sharing=FLAGS.weight_sharing,
-                    interaction="concat",
+                    interaction="multiply",
                     word_embedding_type=FLAGS.word_embedding_type
                 )
                 print("Initialized TextRCNN model.")
 
             # Define Training procedure
             global_step = tf.Variable(0, name="global_step", trainable=False)
-            learning_rate = tf.train.exponential_decay(FLAGS.lr, global_step, decay_steps=int(30000/FLAGS.batch_size),
+            learning_rate = tf.train.exponential_decay(FLAGS.lr, global_step, decay_steps=int(40000/FLAGS.batch_size),
                                                        decay_rate=FLAGS.weight_decay_rate, staircase=True)
             optimizer = tf.train.AdamOptimizer(learning_rate)
             # optimizer = tf.train.MomentumOptimizer(learning_rate, 0.9)
@@ -242,19 +243,19 @@ def train():
                     model.input_y: y_batch,
                     model.dropout_keep_prob: 1.0,
                 }
-                x1, out1, out2, sim_euc, sim_cos, sim_ma, e = sess.run(
-                    [model.embedded_1, model.out1, model.out2, model.sim_euc, model.sim_cos, model.sim_ma, model.e], feed_dict)
-                # print(x1)
-                sim_euc = [round(s, 2) for s in sim_euc[:30]]
-                sim_cos = [round(s, 2) for s in sim_cos[:30]]
-                sim_ma = [round(s, 2) for s in sim_ma[:30]]
-                e = [round(s, 2) for s in e[:30]]
-                # print(out1)
-                out1 = [round(s, 3) for s in out1[0]]
-                out2 = [round(s, 3) for s in out2[0]]
-                print(zip(out1, out2))
-                for w in zip(y_batch[:30], e, sim_euc, sim_cos, sim_ma):
-                    print(w)
+                # x1, out1, out2, sim_euc, sim_cos, sim_ma, e = sess.run(
+                #     [model.embedded_1, model.out1, model.out2, model.sim_euc, model.sim_cos, model.sim_ma, model.e], feed_dict)
+                # # print(x1)
+                # sim_euc = [round(s, 2) for s in sim_euc[:30]]
+                # sim_cos = [round(s, 2) for s in sim_cos[:30]]
+                # sim_ma = [round(s, 2) for s in sim_ma[:30]]
+                # e = [round(s, 2) for s in e[:30]]
+                # # print(out1)
+                # out1 = [round(s, 3) for s in out1[0]]
+                # out2 = [round(s, 3) for s in out2[0]]
+                # print(zip(out1, out2))
+                # for w in zip(y_batch[:30], e, sim_euc, sim_cos, sim_ma):
+                #     print(w)
 
                 loss, acc, cm, precision, recall, F1, summaries = sess.run(
                     [model.loss, model.acc, model.cm, model.precision, model.recall, model.f1, dev_summary_op], feed_dict)
@@ -275,7 +276,7 @@ def train():
                 #         F1_best = F1
                 #         path = saver.save(sess, checkpoint_prefix, global_step=step)
                 #         print("Saved model with F1={} checkpoint to {}\n".format(F1_best, path))
-            if step - last_improved_step > 2000:  # 2000 steps
+            if step - last_improved_step > 4000:  # 2000 steps
                 print("No improvement for a long time, early-stopping at best F1={}".format(F1_best))
                 break
 

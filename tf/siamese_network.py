@@ -104,7 +104,7 @@ class SiameseNets(object):
         self.distance = tf.sqrt(tf.reduce_sum(tf.square(self.out1-self.out2), 1, keep_dims=False))
         # normalize euclidean distance, think as triangle, so dis range [0,1]
         self.distance = tf.div(self.distance, tf.add(out1_norm, out2_norm))
-        self.sim_euc = 1 - self.distance
+        self.sim_euc = tf.subtract(1, self.distance, name="euc")
 
         # self.sim = tf.reduce_sum(tf.multiply(self.out1, self.out2), 1) / tf.multiply(out1_norm, out2_norm)
         # # shape(batch_size,), if keep_dims=True shape(batch_size, 1)
@@ -112,7 +112,7 @@ class SiameseNets(object):
         out2_norm = tf.nn.l2_normalize(self.out2, 1)
         self.sim_cos = tf.reduce_sum(tf.multiply(out1_norm, out2_norm), axis=1, name="cosine")
         # sim = exp(-||x1-x2||) range (0, 1]
-        self.sim_ma = tf.exp(-tf.reduce_sum(tf.abs(self.out1-self.out2), 1))
+        self.sim_ma = tf.exp(-tf.reduce_sum(tf.abs(self.out1-self.out2), 1), name="manhattan")
 
         if energy_func == 'euclidean':
             self.e = self.sim_euc
