@@ -188,9 +188,9 @@ class Dataset():
         Returns:
             2-D List.
             if self.is_training:
-                each element of list is [s1_pad, s2_pad, y, len(s1), len(s2)]
+                each element of list is [s1_pad, s2_pad, y]
             else:
-                each element of list is [s1_pad, s2_pad, len(s1), len(s2)]
+                each element of list is [s1_pad, s2_pad]
         """
         if data_file == self.data_file and os.path.exists(self.npy_file):  # only for all train data
             dataset = np.load(self.npy_file)
@@ -215,12 +215,10 @@ class Dataset():
             s2_pad = tf.keras.preprocessing.sequence.pad_sequences(
                 [s2_id], maxlen=sequence_length, padding='post', truncating='post', value=len(word2id)-1)
             # y = tf.keras.utils.to_categorical(y)  # turn label into onehot
-            s1_len = len(s1) if len(s1) < sequence_length else sequence_length
-            s2_len = len(s2) if len(s2) < sequence_length else sequence_length
             if self.is_training:
-                dataset.append([s1_pad[0], s2_pad[0], y, s1_len, s2_len])
+                dataset.append([s1_pad[0], s2_pad[0], y])
             else:
-                dataset.append([s1_pad[0], s2_pad[0], s1_len, s2_len])
+                dataset.append([s1_pad[0], s2_pad[0]])
         print("Saving npy...")
         dataset = np.asarray(dataset)
         np.save(self.npy_file, dataset)

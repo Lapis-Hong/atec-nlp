@@ -29,12 +29,12 @@ class SiameseNets(object):
                  dense_layer=False,
                  use_attention=False,
                  weight_sharing=True):
-        self.seqlen1 = tf.placeholder(tf.int32, [None])
-        self.seqlen2 = tf.placeholder(tf.int32, [None])
         self.input_x1 = tf.placeholder(tf.int32, [None, sequence_length], name="input_x1")
         self.input_x2 = tf.placeholder(tf.int32, [None, sequence_length], name="input_x2")
         self.input_y = tf.placeholder(tf.float32, [None], name="input_y")
         self.dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
+        self.seqlen1 = tf.cast(tf.reduce_sum(tf.sign(self.input_x1), 1), tf.int32)
+        self.seqlen2 = tf.cast(tf.reduce_sum(tf.sign(self.input_x2), 1), tf.int32)
         # input word level dropout, data augmentation, invariance to small input change
         # self.shape = tf.shape(self.input_x1)
         # self.mask1 = tf.cast(tf.random_uniform(self.shape) > 0.1, tf.int32)
@@ -104,7 +104,7 @@ class SiameseNets(object):
         self.distance = tf.sqrt(tf.reduce_sum(tf.square(self.out1-self.out2), 1, keep_dims=False))
         # normalize euclidean distance, think as triangle, so dis range [0,1]
         self.distance = tf.div(self.distance, tf.add(out1_norm, out2_norm))
-        self.sim_euc = tf.subtract(1, self.distance, name="euc")
+        self.sim_euc = tf.subtract(1.0, self.distance, name="euc")
 
         # self.sim = tf.reduce_sum(tf.multiply(self.out1, self.out2), 1) / tf.multiply(out1_norm, out2_norm)
         # # shape(batch_size,), if keep_dims=True shape(batch_size, 1)
@@ -141,24 +141,28 @@ class SiameseNets(object):
 
         # Accuracy computation is outside of this class.
         with tf.name_scope("metrics"):
-            # tf.rint: Returns element-wise integer closest to x. auto threshold 0.5
             self.y_pred = tf.cast(tf.greater(self.e, pred_threshold), dtype=tf.float32, name="y_pred")
             # self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.y_pred, self.input_y), tf.float32), name="accuracy")
-            TP = tf.count_nonzero(self.input_y * self.y_pred, dtype=tf.float32)
-            TN = tf.count_nonzero((self.input_y - 1) * (self.y_pred - 1), dtype=tf.float32)
-            FP = tf.count_nonzero(self.y_pred * (self.input_y - 1), dtype=tf.float32)
-            FN = tf.count_nonzero((self.y_pred - 1) * self.input_y, dtype=tf.float32)
-            # tf.div like python2 division, tf.divide like python3
+            # TP = tf.count_nonzero(self.input_y * self.y_pred, dtype=tf.float32)
+            # TN = tf.count_nonzero((self.input_y - 1) * (self.y_pred - 1), dtype=tf.float32)
+            # FP = tf.count_nonzero(self.y_pred * (self.input_y - 1), dtype=tf.float32)
+            # FN = tf.count_nonzero((self.y_pred - 1) * self.input_y, dtype=tf.float32)
+            # # tf.div like python2 division, tf.divide like python3
+            # self.acc = tf.divide(TP + TN, TP + TN + FP + FN, name="accuracy")
+            # self.precision = tf.divide(TP, TP + FP, name="precision")
+            # self.recall = tf.divide(TP, TP + FN, name="recall")
+            # https://github.com/tensorflow/tensorflow/issues/15115
             self.cm = tf.confusion_matrix(self.input_y, self.y_pred, name="confusion_matrix")  # [[5036 1109] [842 882]]
-            self.acc = tf.divide(TP + TN, TP + TN + FP + FN, name="accuracy")
-            self.precision = tf.divide(TP, TP + FP, name="precision")
-            self.recall = tf.divide(TP, TP + FN, name="recall")
+            _, self.acc = tf.metrics.accuracy(self.input_y, self.y_pred)
+            _, self.precision = tf.metrics.precision(self.input_y, self.y_pred, name='precision')
+            _, self.recall = tf.metrics.recall(self.input_y, self.y_pred, name='recall')
+            # tf.assert_equal(self.acc, self.acc_)
             self.f1 = tf.divide(2 * self.precision * self.recall, self.precision + self.recall, name="F1_score")
 
     def bi_rnn(self, x, rnn_cell, hidden_units, num_layers, sequence_length, dynamic, use_attention, scope):
+        rnn = tf.nn.rnn_cell
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
             # scope.reuse_variables()  # or tf.get_variable_scope().reuse_variables()
-
             # current_batch_of_words does not correspond to a "sentence" of words
             # but [t_steps, batch_size, num_features]
             # Unpacks the given dimension of a rank-`R` tensor into rank-`(R-1)` tensors.
@@ -166,20 +170,28 @@ class SiameseNets(object):
             if not dynamic:
                 x = tf.unstack(tf.transpose(x, perm=[1, 0, 2]))  # `static_rnn` input
             if rnn_cell.lower() == 'lstm':
-                rnn_cell = tf.nn.rnn_cell.LSTMCell
+                rnn_cell = rnn.LSTMCell
             elif rnn_cell.lower() == 'gru':
-                rnn_cell = tf.nn.rnn_cell.GRUCell
+                rnn_cell = rnn.GRUCell
             with tf.variable_scope("fw"):
                 # state(c, h), tf.nn.rnn_cell.BasicLSTMCell does not support gradient clipping, use tf.nn.rnn_cell.LSTMCell.
-                fw_cells = [rnn_cell(hidden_units) for _ in range(num_layers)]
-                fw_cells = tf.nn.rnn_cell.MultiRNNCell(cells=fw_cells, state_is_tuple=True)
-                fw_cells = tf.nn.rnn_cell.DropoutWrapper(fw_cells, input_keep_prob=1, output_keep_prob=self.dropout_keep_prob,
-                                                         state_keep_prob=1.0, variational_recurrent=False, dtype=tf.float32)
+                # fw_cells = [rnn_cell(hidden_units) for _ in range(num_layers)]
+                fw_cells = []
+                for _ in range(num_layers):
+                    fw_cell = rnn_cell(hidden_units)
+                    fw_cell = rnn.DropoutWrapper(fw_cell, output_keep_prob=self.dropout_keep_prob,
+                                                            variational_recurrent=False, dtype=tf.float32)
+                    fw_cells.append(fw_cell)
+                fw_cells = rnn.MultiRNNCell(cells=fw_cells, state_is_tuple=True)
             with tf.variable_scope("bw"):
-                bw_cells = [rnn_cell(hidden_units) for _ in range(num_layers)]
-                bw_cells = tf.nn.rnn_cell.MultiRNNCell(cells=bw_cells, state_is_tuple=True)
-                bw_cells = tf.nn.rnn_cell.DropoutWrapper(bw_cells, input_keep_prob=1, output_keep_prob=self.dropout_keep_prob,
-                                                         variational_recurrent=False, dtype=tf.float32)
+                bw_cells = []
+                for _ in range(num_layers):
+                    bw_cell = rnn_cell(hidden_units)
+                    bw_cell = rnn.DropoutWrapper(bw_cell, output_keep_prob=self.dropout_keep_prob,
+                                                 variational_recurrent=False, dtype=tf.float32)
+                    bw_cells.append(bw_cell)
+                bw_cells = rnn.MultiRNNCell(cells=bw_cells, state_is_tuple=True)
+
             if dynamic:
                 # [batch_size, max_time, cell_fw.output_size]
                 outputs, output_states = tf.nn.bidirectional_dynamic_rnn(
@@ -191,8 +203,9 @@ class SiameseNets(object):
                 outputs = tf.concat([output_fw, output_bw], 1)
             else:
                 # `static_rnn` Returns: A tuple (outputs, output_state_fw, output_state_bw)
-                # outputs is a list of outputs (one for each input), depth-concatenated forward and backward outputs.
-                outputs, _, _ = tf.nn.static_bidirectional_rnn(fw_cells, bw_cells, x, dtype=tf.float32)
+                # outputs is a list of timestep outputs, depth-concatenated forward and backward outputs.
+                outputs, _, _ = tf.nn.static_bidirectional_rnn(
+                    fw_cells, bw_cells, x, dtype=tf.float32, sequence_length=sequence_length)
                 # outputs = tf.reduce_mean(outputs, 0)  # average [batch_size, hidden_units] (mean pooling)
                 # outputs = tf.reduce_max(outputs, axis=0)  # max pooling, bad result.
                 if use_attention:
@@ -222,7 +235,10 @@ class SiameseNets(object):
                         I = tf.eye(r, r, batch_shape=[batch_size], name="I")
                         self.P = tf.square(tf.norm(tf.matmul(self.A, A_T) - I, axis=[-2, -1], ord='fro'), name="P")
                 else:
-                    outputs = outputs[-1]  # take last hidden state [batch_size, hidden_units]
+                    # outputs = outputs[-1]  # take last hidden state [batch_size, hidden_units]
+                    outputs = tf.transpose(tf.stack(outputs), [1, 0, 2])  # shape(batch_size, seq_len, hidden_units)
+                    outputs = self.last_relevant(outputs, sequence_length)
+
         return outputs
 
     def cnn(self, x, sequence_length, embedding_size, filter_sizes, num_filters, scope):
@@ -263,6 +279,15 @@ class SiameseNets(object):
         l_0 = tf.square(tf.maximum(e-margin, 0))
         loss = tf.reduce_mean(y * l_1 + (1 - y) * l_0)
         return loss
+
+    @staticmethod
+    def last_relevant(outputs, sequence_length):
+        batch_size = tf.shape(outputs)[0]
+        max_length = outputs.get_shape()[1]
+        output_size = outputs.get_shape()[2]
+        index = tf.range(0, batch_size) * max_length + (sequence_length - 1)
+        flat = tf.reshape(outputs, [-1, output_size])
+        return tf.gather(flat, index)
 
     @property
     def variables(self):

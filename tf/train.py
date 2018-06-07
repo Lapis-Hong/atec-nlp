@@ -60,6 +60,10 @@ tf.flags.DEFINE_boolean("allow_soft_placement", True, "Allow device soft device 
 tf.flags.DEFINE_boolean("log_device_placement", False, "Log placement of ops on devices")
 
 FLAGS = tf.flags.FLAGS
+
+# supress tensorflow logging other than errors
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 print("\nParameters:")
 if tf.__version__ < 1.5:
     FLAGS._parse_flags()  # tf version <= 1.4
@@ -188,6 +192,7 @@ def train():
         saver = tf.train.Saver(tf.global_variables(), max_to_keep=FLAGS.num_checkpoints)
         # Initialize all variables
         sess.run(tf.global_variables_initializer())
+        sess.run(tf.local_variables_initializer())
 
         if FLAGS.word_embedding_type != 'rand':
             # initial matrix with random uniform
@@ -211,14 +216,12 @@ def train():
         F1_best = 0.
         last_improved_step = 0
         for batch in train_batches:
-            x1_batch, x2_batch, y_batch, seqlen1, seqlen2 = zip(*batch)
+            x1_batch, x2_batch, y_batch = zip(*batch)
             # print(x1_batch[:3])
             # print(y_batch[:3])
             # if random.random() > 0.5:
             #     x1_batch, x2_batch = x2_batch, x1_batch
             feed_dict = {
-                model.seqlen1: seqlen1,
-                model.seqlen2: seqlen2,
                 model.input_x1: x1_batch,
                 model.input_x2: x2_batch,
                 model.input_y: y_batch,
@@ -233,29 +236,27 @@ def train():
                     time_str, step, loss, acc, precision, recall, F1))
             if step % FLAGS.evaluate_every_steps == 0:
                 # eval
-                x1_batch, x2_batch, y_batch, seqlen1, seqlen2 = zip(*eval_data)
+                x1_batch, x2_batch, y_batch = zip(*eval_data)
 
                 feed_dict = {
-                    model.seqlen1: seqlen1,
-                    model.seqlen2: seqlen2,
                     model.input_x1: x1_batch,
                     model.input_x2: x2_batch,
                     model.input_y: y_batch,
                     model.dropout_keep_prob: 1.0,
                 }
-                # x1, out1, out2, sim_euc, sim_cos, sim_ma, e = sess.run(
-                #     [model.embedded_1, model.out1, model.out2, model.sim_euc, model.sim_cos, model.sim_ma, model.e], feed_dict)
-                # # print(x1)
-                # sim_euc = [round(s, 2) for s in sim_euc[:30]]
-                # sim_cos = [round(s, 2) for s in sim_cos[:30]]
-                # sim_ma = [round(s, 2) for s in sim_ma[:30]]
-                # e = [round(s, 2) for s in e[:30]]
-                # # print(out1)
-                # out1 = [round(s, 3) for s in out1[0]]
-                # out2 = [round(s, 3) for s in out2[0]]
-                # print(zip(out1, out2))
-                # for w in zip(y_batch[:30], e, sim_euc, sim_cos, sim_ma):
-                #     print(w)
+                x1, out1, out2, sim_euc, sim_cos, sim_ma, e = sess.run(
+                   [model.embedded_1, model.out1, model.out2, model.sim_euc, model.sim_cos, model.sim_ma, model.e], feed_dict)
+                # print(x1)
+                sim_euc = [round(s, 2) for s in sim_euc[:30]]
+                sim_cos = [round(s, 2) for s in sim_cos[:30]]
+                sim_ma = [round(s, 2) for s in sim_ma[:30]]
+                e = [round(s, 2) for s in e[:30]]
+                # print(out1)
+                out1 = [round(s, 3) for s in out1[0]]
+                out2 = [round(s, 3) for s in out2[0]]
+                print(zip(out1, out2))
+                for w in zip(y_batch[:30], e, sim_euc, sim_cos, sim_ma):
+                    print(w)
 
                 loss, acc, cm, precision, recall, F1, summaries = sess.run(
                     [model.loss, model.acc, model.cm, model.precision, model.recall, model.f1, dev_summary_op], feed_dict)
