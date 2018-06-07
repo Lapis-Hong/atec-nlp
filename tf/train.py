@@ -244,19 +244,19 @@ def train():
                     model.input_y: y_batch,
                     model.dropout_keep_prob: 1.0,
                 }
-                x1, out1, out2, sim_euc, sim_cos, sim_ma, e = sess.run(
-                   [model.embedded_1, model.out1, model.out2, model.sim_euc, model.sim_cos, model.sim_ma, model.e], feed_dict)
-                # print(x1)
-                sim_euc = [round(s, 2) for s in sim_euc[:30]]
-                sim_cos = [round(s, 2) for s in sim_cos[:30]]
-                sim_ma = [round(s, 2) for s in sim_ma[:30]]
-                e = [round(s, 2) for s in e[:30]]
-                # print(out1)
-                out1 = [round(s, 3) for s in out1[0]]
-                out2 = [round(s, 3) for s in out2[0]]
-                print(zip(out1, out2))
-                for w in zip(y_batch[:30], e, sim_euc, sim_cos, sim_ma):
-                    print(w)
+                # x1, out1, out2, sim_euc, sim_cos, sim_ma, e = sess.run(
+                #    [model.embedded_1, model.out1, model.out2, model.sim_euc, model.sim_cos, model.sim_ma, model.e], feed_dict)
+                # # print(x1)
+                # sim_euc = [round(s, 2) for s in sim_euc[:30]]
+                # sim_cos = [round(s, 2) for s in sim_cos[:30]]
+                # sim_ma = [round(s, 2) for s in sim_ma[:30]]
+                # e = [round(s, 2) for s in e[:30]]
+                # # print(out1)
+                # out1 = [round(s, 3) for s in out1[0]]
+                # out2 = [round(s, 3) for s in out2[0]]
+                # print(zip(out1, out2))
+                # for w in zip(y_batch[:30], e, sim_euc, sim_cos, sim_ma):
+                #     print(w)
 
                 loss, acc, cm, precision, recall, F1, summaries = sess.run(
                     [model.loss, model.acc, model.cm, model.precision, model.recall, model.f1, dev_summary_op], feed_dict)
