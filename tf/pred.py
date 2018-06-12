@@ -1,11 +1,11 @@
 # !/usr/bin/env python
-import sys
 import os
+import sys
 
 import tensorflow as tf
 
 from dataset import Dataset
-from train import FLAGS
+from demo.train import FLAGS
 
 FLAGS.model_dir = '/home/hongquan/atec_nlp/model/rnn/'
 FLAGS.max_document_length = 20

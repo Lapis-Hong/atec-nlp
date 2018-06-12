@@ -2,24 +2,25 @@
 # coding: utf-8
 # @Author: lapis-hong
 # @Date  : 2018/5/6
+"""This module provide an elegant data process class."""
 from __future__ import unicode_literals
 
+import logging
+import multiprocessing
 import os
 import re
 import sys
 import time
-import logging
-import multiprocessing
 from collections import Counter
 
-import numpy as np
-import tensorflow as tf
 import jieba
 import jieba.analyse
+import numpy as np
+import tensorflow as tf
 from gensim.models import Word2Vec
 
 sys.path.insert(0, '../')
-from langconv import Converter
+from utils.langconv import Converter
 reload(sys)
 sys.setdefaultencoding('utf-8')
 
@@ -28,7 +29,7 @@ jieba.load_userdict('../data/UserDict.txt')
 stopwords = ['的', '了']
 
 
-class Dataset():
+class Dataset(object):
     """Custom dataset class to deal with input text data."""
     def __init__(self,
                  data_file='../data/atec_nlp_sim_train.csv',
@@ -62,17 +63,18 @@ class Dataset():
 
     @staticmethod
     def _clean_text(text):
-        """Text filter for Chinese corpus, only keep CN character."""
+        """Text filter for Chinese corpus, keep CN character and remove stopwords."""
         re_non_ch = re.compile(ur'[^\u4e00-\u9fa5]+')
         text = text.strip(' ')
         text = re_non_ch.sub('', text)
+        for w in stopwords:
+            text = re.sub(w, '', text)
         return text
 
     @staticmethod
     def _tradition2simple(text):
         """Tradition Chinese corpus to simplify Chinese."""
         text = Converter('zh-hans').convert(text)
-        # text.encode('utf-8')
         return text
 
     def _load_data(self, data_file):
@@ -177,7 +179,7 @@ class Dataset():
                 line = line.decode('utf-8').strip().split(' ')
                 words.append(line[0])
                 vecs.append(line[1:])
-            print "Loaded pre-trained word vectors."
+            print("Loaded pre-trained word vectors.")
         return words, vecs
 
     def process_data(self, data_file, sequence_length=20):
@@ -257,9 +259,9 @@ class Dataset():
     def batch_iter(dataset, batch_size, num_epochs, shuffle=True):
         """Generates a batch iterator for a dataset.
         Args:
-            dataset: 2-D list, each element is a sample list [x1, x2, y, len(s1), len(s2)]
+            dataset: 2-D list, each element is a sample list [x1, x2, y]
         Returns:
-            list of batch samples [x1, x2, y, len(s1), len(s2)].
+            list of batch samples [x1, x2, y].
             use zip(*return) to generate x1_batch, x2_batch, y_batch
         """
         dataset = np.asarray(dataset)

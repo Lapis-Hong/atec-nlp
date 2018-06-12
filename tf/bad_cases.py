@@ -8,7 +8,7 @@ import os
 import tensorflow as tf
 
 from dataset import Dataset
-from train import FLAGS
+from demo.train import FLAGS
 
 
 def bad_cases():
