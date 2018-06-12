@@ -2,5 +2,6 @@
 demo/
 model/
 thought.md
+experiment.md
 *.pyc
 rsync.sh
