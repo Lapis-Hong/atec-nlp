@@ -35,7 +35,7 @@ tf.flags.DEFINE_string("rnn_cell", "lstm", "Rnn cell type, lstm or gru (default:
 tf.flags.DEFINE_integer("hidden_units", 100, "Number of hidden units (default: 50)")
 tf.flags.DEFINE_integer("num_layers", 2, "Number of rnn layers (default: 3)")
 tf.flags.DEFINE_float("clip_norm", 5, "Gradient clipping norm value set None to not use (default: 5)")
-tf.flags.DEFINE_boolean("use_dynamic", True, "Whether use dynamic rnn or not (default: False)")
+tf.flags.DEFINE_boolean("use_dynamic", False, "Whether use dynamic rnn or not (default: False)")
 tf.flags.DEFINE_boolean("use_attention", False, "Whether use self attention or not (default: False)")
 # Common
 tf.flags.DEFINE_boolean("weight_sharing", True, "Sharing CNN or RNN encoder weights. (default: True")
