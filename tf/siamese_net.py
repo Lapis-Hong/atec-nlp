@@ -62,8 +62,8 @@ class SiameseNets(object):
         elif encoder_type.lower() == 'rcnn':
             cnn_out1 = cnn_encoder.forward(self.embedded_1, cnn_scope1)
             cnn_out2 = cnn_encoder.forward(self.embedded_2, cnn_scope2)
-            rnn_out1 = rnn_encoder.forward(self.embedded_1, rnn_scope1, seqlen1)
-            rnn_out2 = rnn_encoder.forward(self.embedded_2, rnn_scope2, seqlen2)
+            rnn_out1 = rnn_encoder.forward(self.embedded_1, seqlen1, rnn_scope1)
+            rnn_out2 = rnn_encoder.forward(self.embedded_2, seqlen2, rnn_scope2)
             self.out1 = tf.concat([cnn_out1, rnn_out1], axis=1)
             self.out2 = tf.concat([cnn_out2, rnn_out2], axis=1)
         else:
@@ -145,7 +145,7 @@ class SiameseSimilarityNets(SiameseNets):
                 [tf.nn.l2_loss(v) for v in tf.trainable_variables() if not ("noreg" in v.name or "bias" in v.name)])
             self.loss += self.l2
             if self._encoder_type != 'cnn' and self._rnn_encoder._use_attention:
-                self.loss += tf.reduce_mean(self._rnn_encoder.encoder.P)
+                self.loss += tf.reduce_mean(self._rnn_encoder.P)
 
         # Accuracy computation is outside of this class.
         # self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.y_pred, self.input_y), tf.float32), name="accuracy")

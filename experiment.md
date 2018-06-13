@@ -36,7 +36,18 @@ step 8600 DEV loss=0.221685 acc=0.768 cm[[5032 1113][ 709 1015]] P=0.477 R=0.589
 # hidden_units=100 num_layers=2 dropout=0.7 pos_weight=2
 step 5600 DEV loss=0.217153 acc=0.771 cm[[2488  572][ 330  544]] P=0.487 R=0.622 F1=0.546734 *
 
-# dyanamic=True, hidden_units=100 num_layers=2 dropout=0.7 pos_weight=2
+
+
+# dyanamic=True, hidden_units=100 num_layers=2 dropout=0.7 pos_weight=2, fast and overfitting
+step 10600 DEV loss=0.21977 acc=0.772 cm[[2505  555][ 341  533]] P=0.490 R=0.610 F1=0.543323 *
+# dyanamic=True, hidden_units=100 num_layers=2 dropout=0.5 pos_weight=2, weight_decay=0.5
+step 6000 DEV loss=0.225551 acc=0.757 cm[[2464  596][ 360  514]] P=0.463 R=0.588 F1=0.518145 *
+# dyanamic=True, hidden_units=100 num_layers=2 dropout=0.5 pos_weight=2 weight_decay=0.5 gru
+step 4100 DEV loss=0.228839 acc=0.753 cm[[2423  637][ 335  539]] P=0.458 R=0.617 F1=0.525854 *
+# dyanamic=True, hidden_units=100 num_layers=2 dropout=0.5 pos_weight=2 weight_decay=0.5 gru lr=1e-2
+step 2400 DEV loss=0.221263 acc=0.765 cm[[2462  598][ 327  547]] P=0.478 R=0.626 F1=0.541852 *
+# euclidean
+step 1000 DEV loss=0.237447 acc=0.758 cm[[2482  578][ 374  500]] P=0.464 R=0.572 F1=0.512295 *
 
 
 classification_cnn: 

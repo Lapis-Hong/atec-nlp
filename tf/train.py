@@ -25,25 +25,25 @@ tf.flags.DEFINE_integer("embedding_dim", 128, "Dimensionality of character/word 
 
 # Model Hyperparameters
 tf.flags.DEFINE_string("model_class", "similarity", "Model class, one of {`similarity`, `classification`}")
-tf.flags.DEFINE_string("model_type", "rnn", "Model type, one of {`cnn`, `rnn`, `rcnn`} (default: rnn)")
+tf.flags.DEFINE_string("model_type", "rcnn", "Model type, one of {`cnn`, `rnn`, `rcnn`} (default: rnn)")
 tf.flags.DEFINE_string("word_embedding_type", "non-static", "One of `rand`, `static`, `non-static`, random init(rand) vs pretrained word2vec(static) vs pretrained word2vec + training(non-static)")
 # If include CNN
 tf.flags.DEFINE_string("filter_sizes", "2,3,4,5", "Comma-separated filter sizes (default: '3,4,5')")
 tf.flags.DEFINE_integer("num_filters", 100, "Number of filters per filter size (default: 128)")
 # If include RNN
-tf.flags.DEFINE_string("rnn_cell", "lstm", "Rnn cell type, lstm or gru (default: lstm)")
+tf.flags.DEFINE_string("rnn_cell", "gru", "Rnn cell type, lstm or gru or rnn(default: lstm)")
 tf.flags.DEFINE_integer("hidden_units", 100, "Number of hidden units (default: 50)")
 tf.flags.DEFINE_integer("num_layers", 2, "Number of rnn layers (default: 3)")
 tf.flags.DEFINE_float("clip_norm", 5, "Gradient clipping norm value set None to not use (default: 5)")
-tf.flags.DEFINE_boolean("use_dynamic", False, "Whether use dynamic rnn or not (default: False)")
+tf.flags.DEFINE_boolean("use_dynamic", True, "Whether use dynamic rnn or not (default: False)")
 tf.flags.DEFINE_boolean("use_attention", False, "Whether use self attention or not (default: False)")
 # Common
 tf.flags.DEFINE_boolean("weight_sharing", True, "Sharing CNN or RNN encoder weights. (default: True")
 tf.flags.DEFINE_boolean("dense_layer", False, "Whether to add a fully connected layer before calculate energy function. (default: False)")
-tf.flags.DEFINE_float("dropout_keep_prob", 0.7, "Dropout keep probability (default: 1.0)")
+tf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout keep probability (default: 1.0)")
 tf.flags.DEFINE_string("energy_function", "cosine", "Similarity energy function, one of {`euclidean`, `cosine`, `exp_manhattan`, `combine`} (default: euclidean)")
 tf.flags.DEFINE_string("loss_function", "contrasive", "Loss function one of `cross_entrophy`, `contrasive`, (default: contrasive loss)")
-tf.flags.DEFINE_float("pred_threshold", 0.50, "Threshold for classify.(default: 0.5)")
+tf.flags.DEFINE_float("pred_threshold", 0.5, "Threshold for classify.(default: 0.5)")
 tf.flags.DEFINE_float("l2_reg_lambda", 0, "L2 regularizaion lambda (default: 0.0)")
 # Only for contrasive loss
 tf.flags.DEFINE_float("scale_pos_weight", 2, "Scale loss function for imbalance data, set it around neg_samples / pos_samples ")
@@ -52,11 +52,11 @@ tf.flags.DEFINE_float("margin", 0.0, "Margin for contrasive loss (default: 0.0)"
 # Training parameters
 tf.flags.DEFINE_string("model_dir", "../model", "Model directory (default: ../model)")
 tf.flags.DEFINE_integer("batch_size", 128, "Batch Size (default: 64)")
-tf.flags.DEFINE_float("lr", 1e-3, "Initial learning rate (default: 1e-3)")
-tf.flags.DEFINE_float("weight_decay_rate", 0.9, "Exponential weight decay rate (default: 0.9) ")
+tf.flags.DEFINE_float("lr", 1e-2, "Initial learning rate (default: 1e-3)")
+tf.flags.DEFINE_float("weight_decay_rate", 0.5, "Exponential weight decay rate (default: 0.9) ")
 tf.flags.DEFINE_integer("num_epochs", 50, "Number of training epochs (default: 100)")
 tf.flags.DEFINE_integer("log_every_steps", 100, "Print log info after this many steps (default: 100)")
-tf.flags.DEFINE_integer("evaluate_every_steps", 200, "Evaluate model on dev set after this many steps (default: 100)")
+tf.flags.DEFINE_integer("evaluate_every_steps", 100, "Evaluate model on dev set after this many steps (default: 100)")
 # tf.flags.DEFINE_integer("checkpoint_every_steps", 1000, "Save model after this many steps (default: 100)")
 tf.flags.DEFINE_integer("num_checkpoints", 5, "Number of checkpoints to store (default: 5)")
 

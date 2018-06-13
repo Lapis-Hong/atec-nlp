@@ -74,7 +74,7 @@ class RNNEncoder(object):
             elif self._rnn_cell.lower() == 'gru':
                 rnn_cell = rnn.GRUCell
             elif self._rnn_cell.lower() == 'rnn':
-                rnn_cell = rnn.RNNCell
+                rnn_cell = rnn.BasicRNNCell
             else:
                 raise ValueError("Invalid rnn_cell type.")
 
@@ -102,49 +102,55 @@ class RNNEncoder(object):
                 outputs, output_states = tf.nn.bidirectional_dynamic_rnn(
                     fw_cells, bw_cells, x, sequence_length=sequence_length, dtype=tf.float32)
                 outputs = tf.concat(outputs, 2)
+                if self._rnn_cell.lower() == 'lstm':
+                    out = tf.concat([output_states[-1][0].h, output_states[-1][1].h], 1)
+                else:
+                    out = tf.concat([output_states[-1][0], output_states[-1][1]], 1)
                 # outputs = outputs[:, -1, :]  # take last hidden states  (batch_size, 2*hidden_units)
-                # outputs = tf.concat([output_states[-1][0].h, output_states[-1][1].h], 1)
-                outputs = self._last_relevant(outputs, sequence_length)
+                # outputs = self._last_relevant(outputs, sequence_length)
             else:
                 # `static_rnn` Returns: A tuple (outputs, output_state_fw, output_state_bw)
                 # outputs is a list of timestep outputs, depth-concatenated forward and backward outputs.
                 outputs, state_fw, state_bw = tf.nn.static_bidirectional_rnn(
                     fw_cells, bw_cells, x, dtype=tf.float32, sequence_length=sequence_length)
-                if self._use_attention:
-                    d_a = 300
-                    r = 2
-                    self.H = tf.transpose(tf.stack(outputs), perm=[1, 0, 2])  # (bs, seq_len, 2*hidden_units)
-                    batch_size = tf.shape(x)[0]
-                    initializer = tf.contrib.layers.xavier_initializer()
-                    with tf.variable_scope("attention"):
-                        # shape(W_s1) = d_a * 2u
-                        self.W_s1 = tf.get_variable('W_s1', shape=[d_a, 2 * self._hidden_units], initializer=initializer)
-                        # shape(W_s2) = r * d_a
-                        self.W_s2 = tf.get_variable('W_s2', shape=[r, d_a], initializer=initializer)
-                        # shape (d_a, 2u) --> shape(batch_size, d_a, 2u)
-                        self.W_s1 = tf.tile(tf.expand_dims(self.W_s1, 0), [batch_size, 1, 1])
-                        self.W_s2 = tf.tile(tf.expand_dims(self.W_s2, 0), [batch_size, 1, 1])
-                        # attention matrix A = softmax(W_s2*tanh(W_s1*H^T)  shape(A) = batch_siz * r * n
-                        self.H_T = tf.transpose(self.H, perm=[0, 2, 1], name="H_T")
-                        self.A = tf.nn.softmax(
-                            tf.matmul(self.W_s2, tf.tanh(tf.matmul(self.W_s1, self.H_T)), name="A"))
-                        # sentences embedding matrix M = AH  shape(M) = (batch_size, r, 2u)
-                        self.M = tf.matmul(self.A, self.H, name="M")
-                        outputs = tf.reshape(self.M, [batch_size, -1])
-
-                    with tf.variable_scope("penalization"):
-                        # penalization term: Frobenius norm square of matrix AA^T-I, ie. P = |AA^T-I|_F^2
-                        A_T = tf.transpose(self.A, perm=[0, 2, 1], name="A_T")
-                        I = tf.eye(r, r, batch_shape=[batch_size], name="I")
-                        self.P = tf.square(tf.norm(tf.matmul(self.A, A_T) - I, axis=[-2, -1], ord='fro'), name="P")
+                outputs = tf.transpose(tf.stack(outputs), perm=[1, 0, 2])
+                if self._rnn_cell.lower() == 'lstm':
+                    out = tf.concat([state_fw[-1].h, state_bw[-1].h], 1)  # good
                 else:
-                    outputs = tf.concat([state_fw[-1].h, state_bw[-1].h], 1)  # good
-                    # outputs = tf.reduce_mean(outputs, 0)  # average [batch_size, hidden_units] (mean pooling)
-                    # outputs = tf.reduce_max(outputs, axis=0)  # max pooling, bad result.
-                    # outputs = outputs[-1]  # take last hidden state [batch_size, hidden_units]
-                    # outputs = tf.transpose(tf.stack(outputs), [1, 0, 2])  # shape(batch_size, seq_len, hidden_units)
-                    # outputs = self._last_relevant(outputs, sequence_length)
-        return outputs
+                    out = tf.concat([state_fw[-1], state_bw[-1]], 1)
+                # outputs = tf.reduce_mean(outputs, 0)  # average [batch_size, hidden_units] (mean pooling)
+                # outputs = tf.reduce_max(outputs, axis=0)  # max pooling, bad result.
+                # outputs = outputs[-1]  # take last hidden state [batch_size, hidden_units]
+                # outputs = tf.transpose(tf.stack(outputs), [1, 0, 2])  # shape(batch_size, seq_len, hidden_units)
+                # outputs = self._last_relevant(outputs, sequence_length)
+            if self._use_attention:
+                d_a = 300
+                r = 2
+                self.H = outputs
+                batch_size = tf.shape(x)[0]
+                initializer = tf.contrib.layers.xavier_initializer()
+                with tf.variable_scope("attention"):  # TODO: Nan in summary histogram for: RNN/attention/W_s2_0/grad/hist
+                    # shape(W_s1) = d_a * 2u
+                    self.W_s1 = tf.get_variable('W_s1', shape=[d_a, 2 * self._hidden_units], initializer=initializer)
+                    # shape(W_s2) = r * d_a
+                    self.W_s2 = tf.get_variable('W_s2', shape=[r, d_a], initializer=initializer)
+                    # shape (d_a, 2u) --> shape(batch_size, d_a, 2u)
+                    self.W_s1 = tf.tile(tf.expand_dims(self.W_s1, 0), [batch_size, 1, 1])
+                    self.W_s2 = tf.tile(tf.expand_dims(self.W_s2, 0), [batch_size, 1, 1])
+                    # attention matrix A = softmax(W_s2*tanh(W_s1*H^T)  shape(A) = batch_siz * r * n
+                    self.H_T = tf.transpose(self.H, perm=[0, 2, 1], name="H_T")
+                    self.A = tf.nn.softmax(
+                        tf.matmul(self.W_s2, tf.tanh(tf.matmul(self.W_s1, self.H_T)), name="A"))
+                    # sentences embedding matrix M = AH  shape(M) = (batch_size, r, 2u)
+                    self.M = tf.matmul(self.A, self.H, name="M")
+                    out = tf.reshape(self.M, [batch_size, -1])
+
+                with tf.variable_scope("penalization"):
+                    # penalization term: Frobenius norm square of matrix AA^T-I, ie. P = |AA^T-I|_F^2
+                    A_T = tf.transpose(self.A, perm=[0, 2, 1], name="A_T")
+                    I = tf.eye(r, r, batch_shape=[batch_size], name="I")
+                    self.P = tf.square(tf.norm(tf.matmul(self.A, A_T) - I, axis=[-2, -1], ord='fro'), name="P")
+        return out
 
     @staticmethod
     def _last_relevant(outputs, sequence_length):
